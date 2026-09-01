@@ -32,7 +32,7 @@ That is the whole product. Everything else here is in service of it, or deleted.
 ## Architecture decisions
 
 **Read session-viewer's index rather than build a second one.** That db already unifies both
-corpora on this machine — `nat` (28,780 sessions) and `beta` (2,427) — so v2 inherits full
+corpora on this machine — `remote` (28,780 sessions) and `local` (2,427) — so v2 inherits full
 coverage for free. Measured before committing: read-only open of the 5.6 GB / 836k-FTS-row
 index takes 11 ms, v2's own `SEARCH_EVENTS_TRI` runs against it **unmodified**, and a Thai
 mid-word trigram query returns in 85 ms.

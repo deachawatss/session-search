@@ -27,7 +27,7 @@ Tracking: TODO.md + GitHub issues (#7 epic).
       `SEARCH_EVENTS_TRI` ran **unmodified** against session-viewer's schema (3 Thai hits,
       85ms); a write attempt was correctly refused. Deleted `import.ts`, `diff.ts`,
       `discover.ts`, `parse.ts`, `schema.sql` rather than leaving them as dead code.
-      Surprise: session-viewer's db already unified BOTH corpora (`nat` 28,780 + `beta` 2,427),
+      Surprise: session-viewer's db already unified BOTH corpora (`remote` 28,780 + `local` 2,427),
       so #17's root-coverage problem evaporated instead of needing a solution.
 
 - [x] **Horizon cut-points recalibrated** 7/30/90 → **30/60/90** (#18).
