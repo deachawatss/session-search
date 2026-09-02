@@ -30,14 +30,12 @@ import type {
 } from "./types";
 import { SELECT_SESSION_BY_ID, SELECT_SESSIONS_BY_UUID_PREFIX } from "./sql";
 
-/// Message content is either a plain string or an array of typed blocks — both shapes occur
-/// in real transcripts. Non-text blocks (tool_use, tool_result, thinking) are summarized by
-/// kind rather than dropped silently, so a context window never looks emptier than it was.
-function extractText(obj: Record<string, unknown>): string {
-  const message = obj["message"];
-  if (message === null || typeof message !== "object") return "";
-  const m = message as Record<string, unknown>;
-  const c = m["content"];
+/// Content is either a plain string or an array of typed blocks — both shapes occur in real
+/// transcripts. Non-text blocks (tool_use, tool_result, thinking) are summarized by kind
+/// rather than dropped silently, so a context window never looks emptier than it was.
+/// Both agents use the same block array, so one reader serves Claude's `message.content`
+/// and Codex's `payload.content` / `payload.output`.
+function extractBlocks(c: unknown): string {
   if (typeof c === "string") return c;
   if (!Array.isArray(c)) return "";
   const parts: string[] = [];
@@ -49,6 +47,53 @@ function extractText(obj: Record<string, unknown>): string {
   }
   return parts.join("\n");
 }
+
+/// Codex wraps every record as `{timestamp, type, payload}` with no `message` key at all,
+/// so the Claude reader returned "" for the whole transcript and a Codex context window
+/// rendered blank. Each payload kind keeps its text in a different field; they are read
+/// here rather than summarized, because a tool's own output is usually the answer someone
+/// searched for.
+function extractCodexPayload(payload: Record<string, unknown>): string {
+  const kind = typeof payload["type"] === "string" ? (payload["type"] as string) : "";
+  // Plain string carriers: the actual conversation turns.
+  for (const field of ["message", "input"] as const) {
+    if (typeof payload[field] === "string") {
+      const name = typeof payload["name"] === "string" ? `${payload["name"]}: ` : "";
+      return field === "input" ? `${name}${payload[field] as string}` : (payload[field] as string);
+    }
+  }
+  // Block-array carriers: assistant/developer messages and tool results.
+  for (const field of ["content", "output"] as const) {
+    const text = extractBlocks(payload[field]);
+    if (text) return text;
+  }
+  if (typeof payload["arguments"] === "string") {
+    const name = typeof payload["name"] === "string" ? `${payload["name"]}: ` : "";
+    return `${name}${payload["arguments"] as string}`;
+  }
+  // `reasoning` carries `summary` (often empty) plus opaque `encrypted_content`. Naming the
+  // kind keeps the line honest instead of pretending it held nothing.
+  const summary = extractBlocks(payload["summary"]);
+  if (summary) return summary;
+  return kind ? `«${kind}»` : "";
+}
+
+function extractText(obj: Record<string, unknown>): string {
+  const message = obj["message"];
+  if (message !== null && typeof message === "object") {
+    return extractBlocks((message as Record<string, unknown>)["content"]);
+  }
+  const payload = obj["payload"];
+  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+    return extractCodexPayload(payload as Record<string, unknown>);
+  }
+  return "";
+}
+
+/// Exported for tests only: the transcript-shape readers are the part most likely to
+/// silently regress when a new agent format appears.
+export const parseTranscriptLineForTest = (line: string, seq: number) =>
+  parseTranscriptLine(line, seq);
 
 function parseTranscriptLine(line: string, seq: number): TranscriptLine {
   let type = "?";
